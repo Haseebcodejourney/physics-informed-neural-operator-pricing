@@ -1,0 +1,15 @@
+model:
+  backbone: deeponet
+
+data:
+  model: merton
+  n_param_samples: 128
+  merton_paths: 30000
+
+loss:
+  pde_type: merton
+  jump_quad_points: 24
+
+train:
+  curriculum: [black_scholes, merton]
+  epochs_per_stage: 35

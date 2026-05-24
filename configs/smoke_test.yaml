@@ -1,0 +1,29 @@
+# Fast config for CI / local smoke tests (~1-2 min on CPU)
+model:
+  backbone: fno
+  hidden_dim: 64
+  fno_depth: 2
+  fno_modes: 8
+  n_spatial: 16
+  n_temporal: 8
+
+data:
+  model: black_scholes
+  n_param_samples: 12
+  n_spatial: 16
+  n_temporal: 8
+  option_style: european
+
+loss:
+  pde_type: black_scholes
+  adaptive: true
+  lambda_physics: 0.05
+
+train:
+  epochs_per_stage: 3
+  batch_size: 2
+  lr: 0.002
+  patience: 10
+  curriculum: [black_scholes]
+  checkpoint_dir: checkpoints/smoke
+  device: cpu

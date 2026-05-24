@@ -1,0 +1,15 @@
+model:
+  backbone: fno
+  fractional_order: 0.75
+
+data:
+  model: fractional_bs
+  n_param_samples: 256
+
+loss:
+  pde_type: fractional_bs
+  lambda_physics: 0.2
+
+train:
+  curriculum: [black_scholes, fractional_bs]
+  epochs_per_stage: 40

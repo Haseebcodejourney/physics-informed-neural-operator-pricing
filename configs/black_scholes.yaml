@@ -1,0 +1,24 @@
+model:
+  backbone: fno
+  hidden_dim: 128
+  n_spatial: 64
+  n_temporal: 32
+  fractional_order: 0.8
+
+data:
+  model: black_scholes
+  n_param_samples: 512
+  option_style: european
+
+loss:
+  pde_type: black_scholes
+  adaptive: true
+  lambda_data: 1.0
+  lambda_physics: 0.1
+  lambda_boundary: 0.5
+
+train:
+  epochs_per_stage: 50
+  batch_size: 8
+  lr: 0.001
+  curriculum: [black_scholes]
