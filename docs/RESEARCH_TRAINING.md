@@ -105,6 +105,22 @@ Compare CF-HPINO vs PINN vs Pure FNO vs classical BS in `results/research_bs/met
 | OOM on GPU | Reduce `batch_size`, `n_spatial`, `n_temporal`, or `hidden_dim` |
 | Merton too slow | Lower `merton_paths` in data section (e.g. 10000) for training |
 
+## Ablation study
+
+```bash
+python scripts/run_ablation.py --device cuda
+```
+
+Trains (unless `--skip-train`):
+
+| Variant | What it tests |
+|---------|----------------|
+| `cf_hpino_full` | Full model (Fourier + log grid) |
+| `no_fourier` | `n_fourier_freq: 0` |
+| `linear_grid` | Linear spot grid vs log-spaced |
+
+Results: `results/ablation/summary.csv`. See [LIMITATIONS.md](../LIMITATIONS.md).
+
 ## Reporting in a paper
 
 Report at minimum:

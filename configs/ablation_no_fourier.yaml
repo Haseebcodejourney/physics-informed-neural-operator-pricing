@@ -1,0 +1,39 @@
+# Ablation: CF-HPINO without Fourier coordinate encoding
+model:
+  backbone: fno
+  hidden_dim: 128
+  fno_depth: 4
+  fno_modes: 16
+  n_spatial: 48
+  n_temporal: 24
+  n_fourier_freq: 0
+
+data:
+  model: black_scholes
+  n_param_samples: 300
+  n_spatial: 48
+  n_temporal: 24
+  log_spatial_grid: true
+
+loss:
+  pde_type: black_scholes
+  adaptive: true
+  relative_data_weight: 0.5
+  use_log_spatial: true
+
+train:
+  experiment_name: ablation_no_fourier
+  checkpoint_dir: checkpoints/ablation/no_fourier
+  curriculum: [black_scholes]
+  epochs_per_stage: 40
+  min_epochs: 15
+  patience: 12
+  batch_size: 6
+  lr: 0.0008
+  device: cuda
+  use_ema: true
+  val_fraction: 0.15
+  test_fraction: 0.10
+  monitor: val_rel_l2
+  run_test_after_train: false
+  seed: 42

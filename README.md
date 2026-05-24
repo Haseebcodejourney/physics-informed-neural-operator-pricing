@@ -111,6 +111,24 @@ cf_hpino/
 
 ---
 
+## Limitations
+
+See **[LIMITATIONS.md](LIMITATIONS.md)** for known scope limits, safe paper claims, and the mitigation roadmap.
+
+## Ablation study
+
+Compare full CF-HPINO vs no-Fourier vs linear grid on a shared test split:
+
+```bash
+python scripts/run_ablation.py --device cuda
+python scripts/run_ablation.py --device cuda --epochs-per-stage 20  # shorter run
+python scripts/run_ablation.py --skip-train  # evaluate existing checkpoints only
+```
+
+Outputs: `results/ablation/summary.csv`, `summary.md`, `summary.json`
+
+Configs: `configs/ablation_full.yaml`, `ablation_no_fourier.yaml`, `ablation_linear_grid.yaml`
+
 ## Research-grade training (for publication)
 
 See **[docs/RESEARCH_TRAINING.md](docs/RESEARCH_TRAINING.md)** for the full protocol.
