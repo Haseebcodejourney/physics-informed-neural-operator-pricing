@@ -111,6 +111,28 @@ cf_hpino/
 
 ---
 
+## Research-grade training (for publication)
+
+See **[docs/RESEARCH_TRAINING.md](docs/RESEARCH_TRAINING.md)** for the full protocol.
+
+```bash
+# Phase 1: Black-Scholes until validation error is low (GPU, ~1-3 hours)
+python scripts/train.py --config configs/research_bs.yaml --device cuda
+
+# Full curriculum: BS + fractional BS + Merton (GPU, several hours)
+python scripts/train.py --config configs/research_full.yaml --device cuda
+```
+
+| Config | Use case |
+|--------|----------|
+| `research_bs.yaml` | **Start here** — 120 epochs, 600 samples, val/test splits |
+| `research_medium.yaml` | Faster GPU run (~1 hour) |
+| `research_full.yaml` | Full paper pipeline with 3-stage curriculum |
+
+**Target:** test set **relative L2 < 5%** on Black–Scholes for strong results.
+
+---
+
 ## Quick start
 
 **1. Smoke test (CPU, ~20 seconds)**

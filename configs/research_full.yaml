@@ -1,0 +1,59 @@
+# Full scientific research protocol (GPU recommended, several hours)
+# Curriculum: Black-Scholes -> fractional BS -> Merton with held-out val/test
+
+experiment:
+  name: cf_hpino_research_full
+
+model:
+  backbone: fno
+  hidden_dim: 128
+  fno_depth: 4
+  fno_modes: 16
+  n_spatial: 64
+  n_temporal: 32
+  fractional_order: 0.8
+  drdd_n_subspaces: 12
+
+data:
+  model: black_scholes
+  n_param_samples: 800
+  n_spatial: 64
+  n_temporal: 32
+  option_style: european
+  merton_paths: 30000
+
+loss:
+  pde_type: black_scholes
+  adaptive: true
+  lambda_data: 1.0
+  lambda_physics: 0.15
+  lambda_operator: 0.05
+  lambda_boundary: 0.5
+
+train:
+  experiment_name: cf_hpino_research_full
+  device: cuda
+  checkpoint_dir: checkpoints/research_full
+  curriculum:
+    - black_scholes
+    - fractional_bs
+    - merton
+  epochs_per_stage: 80
+  min_epochs: 25
+  patience: 20
+  batch_size: 8
+  lr: 0.0008
+  weight_decay: 1.0e-5
+  scheduler: cosine
+  use_lbfgs: true
+  lbfgs_start_epoch: 60
+  lbfgs_max_iter: 15
+  val_fraction: 0.15
+  test_fraction: 0.10
+  save_every: 10
+  use_amp: true
+  grad_clip: 1.0
+  monitor: val_rel_l2
+  seed: 42
+  num_workers: 0
+  run_test_after_train: true

@@ -1,0 +1,42 @@
+# Medium run (~30-60 min GPU / few hours CPU) — stronger than smoke, faster than full
+
+experiment:
+  name: cf_hpino_research_medium
+
+model:
+  backbone: fno
+  hidden_dim: 96
+  fno_depth: 3
+  fno_modes: 12
+  n_spatial: 48
+  n_temporal: 24
+
+data:
+  model: black_scholes
+  n_param_samples: 200
+  n_spatial: 48
+  n_temporal: 24
+  option_style: european
+
+loss:
+  pde_type: black_scholes
+  adaptive: true
+  lambda_physics: 0.1
+
+train:
+  experiment_name: cf_hpino_research_medium
+  device: cuda
+  checkpoint_dir: checkpoints/research_medium
+  curriculum: [black_scholes]
+  epochs_per_stage: 60
+  min_epochs: 15
+  patience: 15
+  batch_size: 6
+  lr: 0.001
+  val_fraction: 0.15
+  test_fraction: 0.10
+  save_every: 5
+  use_amp: true
+  monitor: val_rel_l2
+  seed: 42
+  run_test_after_train: true

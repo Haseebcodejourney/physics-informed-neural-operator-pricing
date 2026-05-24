@@ -29,6 +29,7 @@ def main():
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--checkpoint-dir", default=None)
+    parser.add_argument("--resume", type=str, default=None, help="Resume from checkpoint .pt")
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -47,13 +48,18 @@ def main():
         checkpoint_dir=args.checkpoint_dir,
         lr=args.lr,
     )
+    if args.resume:
+        exp["train"].resume = args.resume
 
     model, loss_fn, trainer = build_trainer_from_experiment(exp)
     print(f"Config: {config_path}")
     print(f"Device: {trainer.device} | Params: {sum(p.numel() for p in model.parameters()):,}")
     print(f"Curriculum: {trainer.cfg.curriculum}")
+    print(f"Monitor: {trainer.cfg.monitor} | Train/val/test split: "
+          f"{1 - trainer.cfg.val_fraction - trainer.cfg.test_fraction:.0%} / "
+          f"{trainer.cfg.val_fraction:.0%} / {trainer.cfg.test_fraction:.0%}")
 
-    trainer.train()
+    trainer.train(config_path=str(config_path))
     ckpt = Path(trainer.cfg.checkpoint_dir) / "best.pt"
     print(f"Training complete. Checkpoint: {ckpt}")
 

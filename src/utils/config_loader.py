@@ -67,6 +67,11 @@ def experiment_from_dict(raw: Dict[str, Any]) -> Dict[str, Any]:
     if "option_style" in data_raw and isinstance(data_raw["option_style"], str):
         data_raw["option_style"] = data_raw["option_style"].lower()
     dataset_cfg = DatasetConfig(**_filter_dataclass(DatasetConfig, data_raw))
+    # Align data grid with model unless explicitly set in YAML `data:`
+    if "n_spatial" not in data_raw:
+        dataset_cfg.n_spatial = model_cfg.n_spatial
+    if "n_temporal" not in data_raw:
+        dataset_cfg.n_temporal = model_cfg.n_temporal
     loss_cfg = LossConfig(**_filter_dataclass(LossConfig, loss_raw))
     train_cfg = TrainConfig(**_filter_dataclass(TrainConfig, train_raw))
 
