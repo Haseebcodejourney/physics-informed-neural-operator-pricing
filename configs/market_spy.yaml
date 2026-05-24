@@ -1,0 +1,42 @@
+# Train CF-HPINO on real SPY option chain (CSV from fetch_market_data.py)
+
+model:
+  backbone: fno
+  hidden_dim: 128
+  fno_depth: 4
+  fno_modes: 16
+  n_spatial: 64
+  n_temporal: 32
+  n_fourier_freq: 6
+
+data:
+  model: black_scholes
+  n_spatial: 64
+  n_temporal: 32
+  log_spatial_grid: true
+
+loss:
+  pde_type: black_scholes
+  adaptive: true
+  lambda_data: 0.4
+  lambda_physics: 0.04
+  lambda_boundary: 0.3
+  lambda_market: 4.0
+  relative_data_weight: 0.6
+  use_log_spatial: true
+
+train:
+  experiment_name: cf_hpino_market_spy
+  device: cuda
+  checkpoint_dir: checkpoints/market_spy
+  curriculum: [black_scholes]
+  epochs_per_stage: 100
+  min_epochs: 20
+  patience: 20
+  batch_size: 4
+  lr: 0.0006
+  use_ema: true
+  ema_decay: 0.999
+  warmup_epochs: 8
+  run_test_after_train: false
+  seed: 42

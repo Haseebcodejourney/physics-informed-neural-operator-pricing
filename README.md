@@ -111,6 +111,21 @@ cf_hpino/
 
 ---
 
+## Real market data (SPY / CSV)
+
+Download live options, train, and test on **held-out expiries**:
+
+```bash
+pip install yfinance pandas
+python scripts/fetch_market_data.py --ticker SPY --out data/raw/spy_options.csv
+python scripts/train_market.py --csv data/raw/spy_options.csv --config configs/market_spy.yaml --device cuda
+python scripts/test_market.py --checkpoint checkpoints/market_spy/best.pt --csv data/raw/spy_options.csv
+```
+
+Details: [data/README.md](data/README.md)
+
+---
+
 ## Limitations
 
 See **[LIMITATIONS.md](LIMITATIONS.md)** for known scope limits, safe paper claims, and the mitigation roadmap.

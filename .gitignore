@@ -26,3 +26,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Raw market downloads (fetch locally)
+data/raw/*.csv
+!data/raw/.gitkeep

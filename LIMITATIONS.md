@@ -11,7 +11,7 @@ This document lists **current limitations** of the implementation as of the rese
 | Option type | Primary focus on **European** calls. American pricing uses approximate penalties / PSOR references, not a full LCP neural solver. |
 | Underlying models | **Black–Scholes**, **fractional BS** (Caputo time), and **Merton jump-diffusion** only. No Heston, SABR, local/stochastic vol surfaces, baskets, or rates exotics. |
 | Payoff | Mostly **call** payoffs. Put–call parity is not enforced in the loss. |
-| Market realism | Training is dominated by **synthetic** surfaces. Real SPX/listed option support is experimental (CSV loader, basic IV handling). |
+| Market realism | **Real data pipeline** added (`fetch_market_data`, `train_market`) via Yahoo SPY chains; SPX/index and full smile calibration remain limited. |
 
 ---
 

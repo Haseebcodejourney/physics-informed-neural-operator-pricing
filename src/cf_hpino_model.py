@@ -221,20 +221,19 @@ class FNOBackbone(nn.Module):
             latent: (B, C, H, W) last hidden feature map for fusion
         """
         if grid.dim() == 3:
-            b, n, _ = grid.shape
+            b, n, c_feat = grid.shape
             h = self.cfg.n_spatial
             w = self.cfg.n_temporal
-            # Reshape scattered points to regular grid if N = H*W
             if n == h * w:
-                grid = grid.view(b, h, w, 2)
+                grid = grid.view(b, h, w, c_feat)
             else:
                 raise ValueError(
-                    f"FNO expects grid with H*W={h*w} points or (B,H,W,2); got N={n}"
+                    f"FNO expects N=H*W={h*w} coordinate features; got shape {grid.shape}"
                 )
 
-        b, h, w, _ = grid.shape
+        b, h, w, c_feat = grid.shape
         p = params.unsqueeze(-1).unsqueeze(-1).expand(b, self.cfg.n_params, h, w)
-        g = grid.permute(0, 3, 1, 2)  # (B, 2, H, W)
+        g = grid.permute(0, 3, 1, 2)  # (B, C_coord, H, W)
         x = torch.cat([p, g], dim=1)
         x = self.lift(x)
         for block in self.blocks:

@@ -55,12 +55,13 @@ class LossConfig:
     huber_delta: float = 1.0
     payoff_weight: float = 2.0
     use_log_spatial: bool = True
+    lambda_market: float = 2.0
 
 
 class AdaptiveLossWeights(nn.Module):
     """Homoscedastic uncertainty weighting: L = Σ exp(-s_i)*L_i + s_i."""
 
-    def __init__(self, n_terms: int = 4):
+    def __init__(self, n_terms: int = 8):
         super().__init__()
         self.log_vars = nn.Parameter(torch.zeros(n_terms))
 
@@ -86,7 +87,7 @@ class CFHPINOLoss(nn.Module):
     def __init__(self, cfg: Optional[LossConfig] = None):
         super().__init__()
         self.cfg = cfg or LossConfig()
-        self.adaptive = AdaptiveLossWeights(n_terms=5) if self.cfg.adaptive else None
+        self.adaptive = AdaptiveLossWeights(n_terms=8) if self.cfg.adaptive else None
         self._geom_meta: Dict[str, float] = {}
 
     def set_geometry_meta(self, meta: Dict[str, float]) -> None:
@@ -137,6 +138,39 @@ class CFHPINOLoss(nn.Module):
         rel = (err**2) / (target**2 + 1e-2)
         w = self.cfg.relative_data_weight
         return (1.0 - w) * abs_loss + w * rel.mean()
+
+    def market_quote_loss(
+        self,
+        pred_grid_flat: torch.Tensor,
+        batch: Dict[str, torch.Tensor],
+    ) -> torch.Tensor:
+        """
+        Match predicted surface at t≈0 to listed mids (nearest strike on grid).
+
+        Uses `pred` from the main forward on the full lattice — avoids FNO on
+        scattered quote coordinates.
+        """
+        grid = batch["grid"]
+        quote_coords = batch["quote_coords"]
+        quote_prices = batch["quote_prices"]
+        quote_mask = batch.get("quote_mask")
+        B, H, W, _ = grid.shape
+        pred_g = pred_grid_flat.view(B, H, W)
+        s_grid = grid[:, :, 0, 0]
+
+        loss_sum = torch.tensor(0.0, device=pred_grid_flat.device)
+        count = 0
+        for b in range(B):
+            nq = quote_coords.shape[1]
+            for q in range(nq):
+                if quote_mask is not None and quote_mask[b, q] < 0.5:
+                    continue
+                sq = quote_coords[b, q, 0]
+                i = torch.argmin((s_grid[b] - sq).abs())
+                pred_q = pred_g[b, i, 0]
+                loss_sum = loss_sum + (pred_q - quote_prices[b, q]) ** 2
+                count += 1
+        return loss_sum / max(count, 1)
 
     def operator_loss(self, features: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Encourage operator branch to match fused target (consistency)."""
@@ -219,7 +253,7 @@ class CFHPINOLoss(nn.Module):
             V_s.sum(), coords, create_graph=True, retain_graph=True
         )[0]
         V_uu = grad2[..., 0]
-        return V, V_u, V_t, V_uu, coords
+        return V, V_s, V_t, V_uu, coords
 
     def black_scholes_residual(
         self,
@@ -422,6 +456,9 @@ class CFHPINOLoss(nn.Module):
         if model.cfg.option_style.value == "american":
             losses["american"] = self.american_penalty(pred, coords, params)
 
+        if "quote_coords" in batch and "quote_prices" in batch:
+            losses["market"] = self.market_quote_loss(pred, batch)
+
         if self.cfg.adaptive and self.adaptive is not None:
             total, weights = self.adaptive(losses)
         else:
@@ -435,6 +472,7 @@ class CFHPINOLoss(nn.Module):
                     if "american" in losses
                     else 0.0
                 )
+                + self.cfg.lambda_market * losses.get("market", 0.0)
             )
             weights = {k: getattr(self.cfg, f"lambda_{k}", 1.0) for k in losses}
 
