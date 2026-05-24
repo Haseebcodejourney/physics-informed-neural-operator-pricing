@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -50,6 +50,11 @@ class LossConfig:
     # Merton quadrature
     jump_quad_points: int = 32
     jump_std_mult: float = 5.0
+    # Accuracy-oriented data loss
+    relative_data_weight: float = 0.5
+    huber_delta: float = 1.0
+    payoff_weight: float = 2.0
+    use_log_spatial: bool = True
 
 
 class AdaptiveLossWeights(nn.Module):
@@ -82,6 +87,15 @@ class CFHPINOLoss(nn.Module):
         super().__init__()
         self.cfg = cfg or LossConfig()
         self.adaptive = AdaptiveLossWeights(n_terms=5) if self.cfg.adaptive else None
+        self._geom_meta: Dict[str, float] = {}
+
+    def set_geometry_meta(self, meta: Dict[str, float]) -> None:
+        """Call once per dataset so S denorm matches log-spaced training grid."""
+        self._geom_meta = dict(meta)
+        if meta.get("log_spatial"):
+            self.cfg.use_log_spatial = True
+            self.cfg.S_min = meta.get("S_min", self.cfg.S_min)
+            self.cfg.S_max = meta.get("S_max", self.cfg.S_max)
 
     # ----- coordinate transforms -----
 
@@ -90,14 +104,25 @@ class CFHPINOLoss(nn.Module):
         coords: torch.Tensor,
         params: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Map normalized (s, t_norm) to physical (S, t)."""
-        S = coords[..., 0] * (self.cfg.S_max - self.cfg.S_min) + self.cfg.S_min
+        """Map normalized coords to physical (S, t). Supports log-spaced S grids."""
         T = params[:, 3:4]
         t = coords[..., 1:2] * T.unsqueeze(1)
+
+        if self.cfg.use_log_spatial and self._geom_meta.get("log_spatial"):
+            log_min = self._geom_meta.get("log_S_min", math.log(self.cfg.S_min))
+            log_max = self._geom_meta.get("log_S_max", math.log(self.cfg.S_max))
+            log_S = coords[..., 0:1] * (log_max - log_min) + log_min
+            S = torch.exp(log_S)
+        else:
+            S = coords[..., 0:1] * (self.cfg.S_max - self.cfg.S_min) + self.cfg.S_min
+
         if coords.dim() == 2:
-            S = S.unsqueeze(0)
-            t = t.unsqueeze(0)
-        return S, t.squeeze(-1) if t.shape[-1] == 1 else t
+            S = S.squeeze(-1) if S.shape[-1] == 1 else S
+            t = t.squeeze(-1) if t.shape[-1] == 1 else t
+        else:
+            S = S.squeeze(-1)
+            t = t.squeeze(-1)
+        return S, t
 
     # ----- individual losses -----
 
@@ -106,7 +131,12 @@ class CFHPINOLoss(nn.Module):
         pred: torch.Tensor,
         target: torch.Tensor,
     ) -> torch.Tensor:
-        return F.mse_loss(pred, target)
+        """Absolute Huber + relative error — matches true prices across scales."""
+        err = pred - target
+        abs_loss = F.huber_loss(pred, target, delta=self.cfg.huber_delta)
+        rel = (err**2) / (target**2 + 1e-2)
+        w = self.cfg.relative_data_weight
+        return (1.0 - w) * abs_loss + w * rel.mean()
 
     def operator_loss(self, features: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Encourage operator branch to match fused target (consistency)."""
@@ -140,12 +170,16 @@ class CFHPINOLoss(nn.Module):
         # Terminal slice t_norm = 1
         coords_T = grid.clone()
         coords_T[..., 1] = 1.0
-        S_norm = coords_T[:, :, 0, 0]
-        S_T = S_norm * (self.cfg.S_max - self.cfg.S_min) + self.cfg.S_min
+        if self.cfg.use_log_spatial and self._geom_meta.get("log_spatial"):
+            log_min = self._geom_meta.get("log_S_min", math.log(self.cfg.S_min))
+            log_max = self._geom_meta.get("log_S_max", math.log(self.cfg.S_max))
+            log_S = coords_T[:, :, 0, 0] * (log_max - log_min) + log_min
+            S_T = torch.exp(log_S)
+        else:
+            S_T = coords_T[:, :, 0, 0] * (self.cfg.S_max - self.cfg.S_min) + self.cfg.S_min
         pred_T = model.forward_grid(params, coords_T)[:, :, 0]
         payoff = torch.relu(S_T - K.unsqueeze(1))
-        loss_terminal = F.mse_loss(pred_T, payoff)
-
+        loss_terminal = F.mse_loss(pred_T, payoff) * self.cfg.payoff_weight
         # S = 0 boundary (first spatial row)
         coords_0 = grid.clone()
         coords_0[..., 0] = 0.0
@@ -184,8 +218,8 @@ class CFHPINOLoss(nn.Module):
         grad2 = torch.autograd.grad(
             V_s.sum(), coords, create_graph=True, retain_graph=True
         )[0]
-        V_ss = grad2[..., 0]
-        return V, V_t, V_ss, coords
+        V_uu = grad2[..., 0]
+        return V, V_u, V_t, V_uu, coords
 
     def black_scholes_residual(
         self,
@@ -193,21 +227,33 @@ class CFHPINOLoss(nn.Module):
         params: torch.Tensor,
         coords: torch.Tensor,
     ) -> torch.Tensor:
-        V, V_tn, V_snn, coords_g = self._derivatives(model, params, coords)
-        S, t = self._denorm_coords(coords_g, params)
+        V, V_u, V_tn, V_uu, coords_g = self._derivatives(model, params, coords)
         r, sigma, _, T, _, _, _, q = params.unbind(dim=1)
-
-        dS = self.cfg.S_max - self.cfg.S_min
-        V_S = V_snn / dS
-        V_SS = V_snn / (dS**2)
         V_t = V_tn / (T.unsqueeze(1) + 1e-8)
 
-        residual = (
-            V_t
-            + 0.5 * sigma.unsqueeze(1) ** 2 * S**2 * V_SS
-            + (r.unsqueeze(1) - q.unsqueeze(1)) * S * V_S
-            - r.unsqueeze(1) * V
-        )
+        if self.cfg.use_log_spatial and self._geom_meta.get("log_spatial"):
+            log_min = self._geom_meta.get("log_S_min", math.log(self.cfg.S_min))
+            log_max = self._geom_meta.get("log_S_max", math.log(self.cfg.S_max))
+            dx_du = log_max - log_min + 1e-8
+            V_x = V_u / dx_du
+            V_xx = V_uu / (dx_du**2)
+            residual = (
+                V_t
+                + (r.unsqueeze(1) - q.unsqueeze(1) - 0.5 * sigma.unsqueeze(1) ** 2) * V_x
+                + 0.5 * sigma.unsqueeze(1) ** 2 * V_xx
+                - r.unsqueeze(1) * V
+            )
+        else:
+            S, _ = self._denorm_coords(coords_g, params)
+            dS = self.cfg.S_max - self.cfg.S_min
+            V_S = V_u / dS
+            V_SS = V_uu / (dS**2)
+            residual = (
+                V_t
+                + 0.5 * sigma.unsqueeze(1) ** 2 * S**2 * V_SS
+                + (r.unsqueeze(1) - q.unsqueeze(1)) * S * V_S
+                - r.unsqueeze(1) * V
+            )
         return (residual**2).mean()
 
     def fractional_bs_residual(
@@ -217,13 +263,18 @@ class CFHPINOLoss(nn.Module):
         coords: torch.Tensor,
     ) -> torch.Tensor:
         """Caputo D_t^α V + spatial BS operator = 0."""
-        V, V_tn, V_snn, coords_g = self._derivatives(model, params, coords)
+        V, V_u, V_tn, V_uu, coords_g = self._derivatives(model, params, coords)
         S, t = self._denorm_coords(coords_g, params)
         r, sigma, _, T, alpha, _, _, q = params.unbind(dim=1)
 
-        dS = self.cfg.S_max - self.cfg.S_min
-        V_S = V_snn / dS
-        V_SS = V_snn / (dS**2)
+        if self.cfg.use_log_spatial and self._geom_meta.get("log_spatial"):
+            dx = self._geom_meta.get("log_S_max", 0) - self._geom_meta.get("log_S_min", 0) + 1e-8
+            V_S = V_u / dx
+            V_SS = V_uu / (dx**2)
+        else:
+            dS = self.cfg.S_max - self.cfg.S_min
+            V_S = V_u / dS
+            V_SS = V_uu / (dS**2)
         spatial = (
             0.5 * sigma.unsqueeze(1) ** 2 * S**2 * V_SS
             + (r.unsqueeze(1) - q.unsqueeze(1)) * S * V_S
@@ -265,13 +316,18 @@ class CFHPINOLoss(nn.Module):
 
         ν = lognormal jump density with mean μ_J, vol σ (same as diffusive σ here).
         """
-        V, V_tn, V_snn, coords_g = self._derivatives(model, params, coords)
+        V, V_u, V_tn, V_uu, coords_g = self._derivatives(model, params, coords)
         S, _ = self._denorm_coords(coords_g, params)
         r, sigma, _, T, _, lam, mu_j, q = params.unbind(dim=1)
 
-        dS = self.cfg.S_max - self.cfg.S_min
-        V_S = V_snn / dS
-        V_SS = V_snn / (dS**2)
+        if self.cfg.use_log_spatial and self._geom_meta.get("log_spatial"):
+            dx = self._geom_meta.get("log_S_max", 0) - self._geom_meta.get("log_S_min", 0) + 1e-8
+            V_S = V_u / dx
+            V_SS = V_uu / (dx**2)
+        else:
+            dS = self.cfg.S_max - self.cfg.S_min
+            V_S = V_u / dS
+            V_SS = V_uu / (dS**2)
         V_t = V_tn / (T.unsqueeze(1) + 1e-8)
 
         diffusion = (

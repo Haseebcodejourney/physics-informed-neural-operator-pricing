@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import os
 import time
 from dataclasses import asdict, dataclass, field
@@ -32,6 +33,7 @@ from ..cf_hpino_model import CF_HPINO, build_cf_hpino
 from ..data import DatasetConfig, OptionPricingDataset, PricingModel
 from ..data.sampling import collate_option_batch
 from ..eval.metrics import relative_l2
+from ..model_utils import ModelEMA
 
 if TYPE_CHECKING:
     pass
@@ -68,6 +70,9 @@ class TrainConfig:
     experiment_name: str = "experiment"
     resume: Optional[str] = None
     run_test_after_train: bool = True
+    use_ema: bool = True
+    ema_decay: float = 0.999
+    warmup_epochs: int = 5
 
 
 def setup_ddp(rank: int, world_size: int, backend: str = "nccl") -> torch.device:
@@ -136,6 +141,9 @@ class CFHPINOTrainer:
         self.wait = 0
         self.history: List[Dict[str, float]] = []
         self.test_indices: Dict[str, List[int]] = {}
+        self.ema: Optional[ModelEMA] = (
+            ModelEMA(self._unwrap(), decay=cfg.ema_decay) if cfg.use_ema else None
+        )
 
         self.ckpt_dir = Path(cfg.checkpoint_dir)
         self.log_dir = self.ckpt_dir / "logs"
@@ -182,9 +190,16 @@ class CFHPINOTrainer:
                 self.optimizer, mode="min", factor=0.5, patience=8
             )
         total = self.cfg.epochs_per_stage * max(len(self.cfg.curriculum), 1)
-        return torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, T_max=max(total, 1), eta_min=self.cfg.lr * 0.01
-        )
+
+        def lr_lambda(epoch: int) -> float:
+            if epoch < self.cfg.warmup_epochs:
+                return max((epoch + 1) / max(self.cfg.warmup_epochs, 1), 0.1)
+            progress = (epoch - self.cfg.warmup_epochs) / max(
+                total - self.cfg.warmup_epochs, 1
+            )
+            return 0.01 + 0.99 * 0.5 * (1.0 + math.cos(math.pi * min(progress, 1.0)))
+
+        return torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda)
 
     def _dataset_cfg(self, stage: str) -> DatasetConfig:
         base = self.cfg.dataset
@@ -211,6 +226,7 @@ class CFHPINOTrainer:
         t0 = time.time()
         full_ds = OptionPricingDataset(self._dataset_cfg(stage))
         print(f"  Dataset ready: {len(full_ds)} surfaces in {time.time() - t0:.1f}s")
+        self.loss_fn.set_geometry_meta(full_ds.meta)
 
         train_idx, val_idx, test_idx = _split_indices(
             len(full_ds),
@@ -265,6 +281,8 @@ class CFHPINOTrainer:
             )
             self.scaler.step(self.optimizer)
             self.scaler.update()
+            if self.ema is not None:
+                self.ema.update(self._unwrap())
 
             total += breakdown["total"]
             for k, v in breakdown.items():
@@ -285,7 +303,7 @@ class CFHPINOTrainer:
         for batch in loader:
             batch = {k: v.to(self.device) for k, v in batch.items()}
             with autocast(enabled=self.use_amp):
-                pred = self._unwrap()(batch["params"], batch["coords"])
+                pred = self._eval_model()(batch["params"], batch["coords"])
             total_mse += torch.mean((pred - batch["prices"]) ** 2).item()
             total_rel += relative_l2(pred, batch["prices"])
             n += 1
@@ -296,6 +314,11 @@ class CFHPINOTrainer:
 
     def _unwrap(self) -> CF_HPINO:
         return self.model.module if isinstance(self.model, DDP) else self.model
+
+    def _eval_model(self) -> CF_HPINO:
+        if self.ema is not None:
+            return self.ema.shadow
+        return self._unwrap()
 
     def _monitor_value(self, val_loss: float, val_rel: float) -> float:
         return val_rel if self.cfg.monitor == "val_rel_l2" else val_loss
@@ -336,7 +359,8 @@ class CFHPINOTrainer:
             "model_config": model_config_to_dict(self._unwrap().cfg),
             "loss_fn": self.loss_fn.state_dict(),
             "optimizer": self.optimizer.state_dict(),
-            "scaler": self.scaler.state_dict(),
+                "scaler": self.scaler.state_dict(),
+                "ema": self.ema.state_dict() if self.ema else None,
             "stage": stage,
             "epoch": epoch,
             "history": self.history,
@@ -357,6 +381,8 @@ class CFHPINOTrainer:
             self.optimizer.load_state_dict(ckpt["optimizer"])
         if "scaler" in ckpt and self.use_amp:
             self.scaler.load_state_dict(ckpt["scaler"])
+        if "ema" in ckpt and ckpt["ema"] is not None and self.ema is not None:
+            self.ema.load_state_dict(ckpt["ema"])
         self.history = ckpt.get("history", [])
         self.best_metric = ckpt.get("best_metric", float("inf"))
         self.test_indices = ckpt.get("test_indices", {})
@@ -380,11 +406,11 @@ class CFHPINOTrainer:
 
     @torch.no_grad()
     def evaluate_test(self, test_loader: DataLoader, stage: str) -> Dict[str, float]:
-        self.model.eval()
+        self._eval_model().eval()
         mse_acc, rel_acc, n = 0.0, 0.0, 0
         for batch in test_loader:
             batch = {k: v.to(self.device) for k, v in batch.items()}
-            pred = self._unwrap()(batch["params"], batch["coords"])
+            pred = self._eval_model()(batch["params"], batch["coords"])
             mse_acc += torch.mean((pred - batch["prices"]) ** 2).item()
             rel_acc += relative_l2(pred, batch["prices"])
             n += 1
@@ -506,6 +532,8 @@ class CFHPINOTrainer:
                     weights_only=False,
                 )
                 self._unwrap().load_state_dict(ckpt["model"])
+                if ckpt.get("ema") and self.ema is not None:
+                    self.ema.load_state_dict(ckpt["ema"])
                 all_test_results[stage] = self.evaluate_test(test_loader, stage)
 
         if rank == 0:

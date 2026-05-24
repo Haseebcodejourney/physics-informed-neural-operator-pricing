@@ -128,8 +128,13 @@ python scripts/train.py --config configs/research_full.yaml --device cuda
 | `research_bs.yaml` | **Start here** — 120 epochs, 600 samples, val/test splits |
 | `research_medium.yaml` | Faster GPU run (~1 hour) |
 | `research_full.yaml` | Full paper pipeline with 3-stage curriculum |
+| `research_accuracy.yaml` | **Best accuracy** — log grid, Fourier features, EMA, 80×40 grid |
 
-**Target:** test set **relative L2 < 5%** on Black–Scholes for strong results.
+**Target:** test set **relative L2 < 5%** (ideally **< 3%**) on Black–Scholes for publication.
+
+```bash
+python scripts/train.py --config configs/research_accuracy.yaml --device cuda
+```
 
 ---
 

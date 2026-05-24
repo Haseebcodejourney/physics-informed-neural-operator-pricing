@@ -16,7 +16,15 @@ This document explains how to train CF-HPINO for **publishable** scientific resu
 
 ## Recommended training order
 
-### Step 1 — Black-Scholes foundation (required)
+### Step 1 — Maximum accuracy (recommended for publication)
+
+```bash
+python scripts/train.py --config configs/research_accuracy.yaml --device cuda
+```
+
+Uses: **log-spaced spot grid**, **Fourier coordinate encoding**, **relative + Huber data loss**, **EMA weights**, **terminal payoff weighting**, 80×40 grid, 1200 samples, 200 epochs.
+
+### Step 2 — Black-Scholes foundation (lighter)
 
 ```bash
 python scripts/train.py --config configs/research_bs.yaml --device cuda

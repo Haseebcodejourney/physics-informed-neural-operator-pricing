@@ -250,6 +250,7 @@ class DatasetConfig:
     merton_paths: int = 20_000
     seed: int = 42
     param_ranges: Optional[ParamRanges] = None
+    log_spatial_grid: bool = True
 
 
 class OptionPricingDataset(Dataset):
@@ -272,6 +273,7 @@ class OptionPricingDataset(Dataset):
             self.params,
             self.ranges,
             normalize=cfg.normalize_coords,
+            log_spatial=cfg.log_spatial_grid,
         )
         self.prices = self._generate_all_prices()
 

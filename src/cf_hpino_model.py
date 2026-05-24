@@ -20,13 +20,15 @@ after first forward if using gradient checkpointing.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from .model_utils import FourierCoordinateEncoding
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +91,8 @@ class CFHPINOConfig:
     # Training helpers
     use_spectral_norm: bool = False
     layer_norm: bool = True
+    # Fourier encoding of (S, t) for higher-frequency price features (0 = off)
+    n_fourier_freq: int = 6
 
 
 # ---------------------------------------------------------------------------
@@ -469,15 +473,26 @@ class CF_HPINO(nn.Module):
         super().__init__()
         self.cfg = cfg or CFHPINOConfig()
 
+        if self.cfg.n_fourier_freq > 0:
+            self.coord_enc: Optional[FourierCoordinateEncoding] = FourierCoordinateEncoding(
+                self.cfg.n_fourier_freq
+            )
+            coord_dim = self.coord_enc.out_dim
+        else:
+            self.coord_enc = None
+            coord_dim = self.cfg.n_coords
+
+        cfg_op = replace(self.cfg, n_coords=coord_dim)
+
         if self.cfg.backbone == OperatorBackbone.FNO:
-            self.operator = FNOBackbone(self.cfg)
+            self.operator = FNOBackbone(cfg_op)
             op_feat_dim = self.cfg.hidden_dim
         else:
-            self.operator = DeepONetBackbone(self.cfg)
+            self.operator = DeepONetBackbone(cfg_op)
             op_feat_dim = self.cfg.deeponet_branch_layers[-1]
 
         self.physics_branch = (
-            PhysicsFeatureBranch(self.cfg) if self.cfg.use_physics_branch else None
+            PhysicsFeatureBranch(cfg_op) if self.cfg.use_physics_branch else None
         )
         phys_dim = self.cfg.physics_hidden[-1] if self.cfg.use_physics_branch else op_feat_dim
 
@@ -529,20 +544,25 @@ class CF_HPINO(nn.Module):
 
     # ----- feature extraction -----
 
+    def _encode_coords(self, coords: torch.Tensor) -> torch.Tensor:
+        if self.coord_enc is not None:
+            return self.coord_enc(coords)
+        return coords
+
     def _operator_forward(
         self,
         params: torch.Tensor,
-        coords: torch.Tensor,
+        coords_enc: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.cfg.backbone == OperatorBackbone.FNO:
-            values, latent = self.operator(params, coords)
+            values, latent = self.operator(params, coords_enc)
             # Flatten grid latent to (B, N, C)
             b, c, h, w = latent.shape
             op_feat = latent.permute(0, 2, 3, 1).reshape(b, h * w, c)
             values_flat = values.reshape(b, h * w)
             return values_flat, op_feat
 
-        values, latent = self.operator(params, coords)
+        values, latent = self.operator(params, coords_enc)
         return values, latent.unsqueeze(-1) if latent.dim() == 2 else latent
 
     def _apply_head(self, fused: torch.Tensor) -> torch.Tensor:
@@ -570,10 +590,11 @@ class CF_HPINO(nn.Module):
         Returns:
             prices: (B, N) or dict
         """
-        op_values, op_feat = self._operator_forward(params, coords)
+        enc = self._encode_coords(coords)
+        op_values, op_feat = self._operator_forward(params, enc)
 
         if self.physics_branch is not None:
-            phys_feat = self.physics_branch(params, coords)
+            phys_feat = self.physics_branch(params, enc)
         else:
             phys_feat = op_feat
 

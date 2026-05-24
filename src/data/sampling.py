@@ -90,6 +90,7 @@ def build_coordinate_grid(
     params: torch.Tensor,
     ranges: Optional[ParamRanges] = None,
     normalize: bool = True,
+    log_spatial: bool = True,
 ) -> Tuple[torch.Tensor, Dict[str, float]]:
     """
     Build (S, t) grid per parameter sample for FNO-style training.
@@ -108,10 +109,18 @@ def build_coordinate_grid(
 
     S_min = S0 * ranges.S_min_ratio
     S_max = S0 * ranges.S_max_ratio
-
-    S_lin = torch.linspace(S_min, S_max, n_spatial)
     device = params.device
-    S_lin = S_lin.to(device)
+
+    if log_spatial:
+        S_lin = torch.exp(
+            torch.linspace(
+                torch.log(torch.tensor(S_min)),
+                torch.log(torch.tensor(S_max)),
+                n_spatial,
+            )
+        ).to(device)
+    else:
+        S_lin = torch.linspace(S_min, S_max, n_spatial).to(device)
 
     grids = []
     for b in range(B):
@@ -121,12 +130,26 @@ def build_coordinate_grid(
         coords = torch.stack([S_grid, t_grid], dim=-1)
         if normalize:
             coords = coords.clone()
-            coords[..., 0] = (coords[..., 0] - S_min) / (S_max - S_min)
+            if log_spatial:
+                log_min = float(torch.log(torch.tensor(S_min)))
+                log_max = float(torch.log(torch.tensor(S_max)))
+                coords[..., 0] = (torch.log(coords[..., 0].clamp(min=1e-8)) - log_min) / (
+                    log_max - log_min + 1e-8
+                )
+            else:
+                coords[..., 0] = (coords[..., 0] - S_min) / (S_max - S_min)
             coords[..., 1] = coords[..., 1] / (T_mat + 1e-8)
         grids.append(coords)
 
     grid = torch.stack(grids, dim=0)
-    meta = {"S_min": S_min, "S_max": S_max, "S0": S0}
+    meta = {
+        "S_min": float(S_min),
+        "S_max": float(S_max),
+        "S0": float(S0),
+        "log_spatial": log_spatial,
+        "log_S_min": float(torch.log(torch.tensor(S_min))),
+        "log_S_max": float(torch.log(torch.tensor(S_max))),
+    }
     return grid, meta
 
 

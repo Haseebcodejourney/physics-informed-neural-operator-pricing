@@ -1,0 +1,57 @@
+# Maximum-accuracy protocol: log-spot grid, Fourier coords, EMA, relative loss
+# Target: test rel-L2 < 3-5% on Black-Scholes (GPU, several hours)
+
+experiment:
+  name: cf_hpino_research_accuracy
+
+model:
+  backbone: fno
+  hidden_dim: 160
+  fno_depth: 5
+  fno_modes: 20
+  n_spatial: 80
+  n_temporal: 40
+  n_fourier_freq: 8
+  fractional_order: 0.8
+  drdd_n_subspaces: 16
+
+data:
+  model: black_scholes
+  n_param_samples: 1200
+  n_spatial: 80
+  n_temporal: 40
+  log_spatial_grid: true
+  option_style: european
+
+loss:
+  pde_type: black_scholes
+  adaptive: true
+  lambda_data: 1.0
+  lambda_physics: 0.12
+  lambda_boundary: 0.8
+  relative_data_weight: 0.55
+  huber_delta: 0.5
+  payoff_weight: 3.0
+  use_log_spatial: true
+
+train:
+  experiment_name: cf_hpino_research_accuracy
+  device: cuda
+  checkpoint_dir: checkpoints/research_accuracy
+  curriculum: [black_scholes]
+  epochs_per_stage: 200
+  min_epochs: 40
+  patience: 30
+  batch_size: 6
+  lr: 0.0006
+  weight_decay: 1.0e-5
+  warmup_epochs: 10
+  use_ema: true
+  ema_decay: 0.9995
+  use_amp: true
+  val_fraction: 0.12
+  test_fraction: 0.08
+  save_every: 5
+  monitor: val_rel_l2
+  seed: 42
+  run_test_after_train: true
