@@ -6,6 +6,8 @@
 
 > **Repository:** https://github.com/Haseebcodejourney/physics-informed-neural-operator-pricing
 
+Official implementation of **CF-HPINO**: hybrid neural operators + physics-informed losses for parametric option surfaces, Greeks, and calibration. Includes PINN/FNO baselines and synthetic + market data pipelines.
+
 Research codebase for European and American options under:
 
 - Black–Scholes (BS)
