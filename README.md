@@ -117,9 +117,11 @@ Download live options, train, and test on **held-out expiries**:
 
 ```bash
 pip install yfinance pandas
-python scripts/fetch_market_data.py --ticker SPY --out data/raw/spy_options.csv
-python scripts/train_market.py --csv data/raw/spy_options.csv --config configs/market_spy.yaml --device cuda
-python scripts/test_market.py --checkpoint checkpoints/market_spy/best.pt --csv data/raw/spy_options.csv
+# All SPY expiries (~5k quotes, ~33 training surfaces) or multi-asset (~12k quotes)
+python scripts/fetch_market_data.py --ticker SPY --max-expiries 0 --out data/raw/spy_options_full.csv
+python scripts/fetch_market_data.py --tickers SPY,QQQ,IWM --max-expiries 0 --out data/raw/multi_options.csv
+python scripts/train_market.py --csv data/raw/spy_options_full.csv --config configs/market_spy.yaml --device cuda
+python scripts/test_market.py --checkpoint checkpoints/market_spy/best.pt --csv data/raw/spy_options_full.csv
 ```
 
 Details: [data/README.md](data/README.md)

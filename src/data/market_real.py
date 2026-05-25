@@ -115,6 +115,14 @@ def load_market_csv(path: Path) -> List[Dict]:
             if moneyness < 0.5 or moneyness > 2.0:
                 continue
 
+            opt_type = "call"
+            for h in header:
+                if h.lower() == "option_type":
+                    opt_type = str(row.get(h, "call")).lower()
+                    break
+            if opt_type not in ("call", ""):
+                continue
+
             rows.append(
                 {
                     "strike": strike,
@@ -337,11 +345,16 @@ def split_real_market_dataset(
     val_idx = perm[n_test : n_test + n_val].tolist()
     train_idx = perm[n_test + n_val : n_test + n_val + n_train].tolist()
 
-    return (
-        RealMarketDataset(cfg, train_idx),
-        RealMarketDataset(cfg, val_idx),
-        RealMarketDataset(cfg, test_idx),
-    )
+    def _subset(indices: List[int]) -> RealMarketDataset:
+        ds = RealMarketDataset.__new__(RealMarketDataset)
+        ds.cfg = cfg
+        ds.ranges = full.ranges
+        ds.samples = [full.samples[i] for i in indices]
+        ds._indices = list(range(len(ds.samples)))
+        ds.meta = full.meta
+        return ds
+
+    return _subset(train_idx), _subset(val_idx), _subset(test_idx)
 
 
 def collate_market_batch(batch: list) -> Dict[str, torch.Tensor]:

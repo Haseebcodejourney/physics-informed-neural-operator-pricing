@@ -168,7 +168,10 @@ class CFHPINOLoss(nn.Module):
                 sq = quote_coords[b, q, 0]
                 i = torch.argmin((s_grid[b] - sq).abs())
                 pred_q = pred_g[b, i, 0]
-                loss_sum = loss_sum + (pred_q - quote_prices[b, q]) ** 2
+                tgt = quote_prices[b, q]
+                err = pred_q - tgt
+                # Relative error stabilizes training across OTM/ITM dollar scales
+                loss_sum = loss_sum + (err**2) / (tgt**2 + 1.0)
                 count += 1
         return loss_sum / max(count, 1)
 
@@ -449,9 +452,17 @@ class CFHPINOLoss(nn.Module):
         if "prices" in batch and batch["prices"] is not None:
             losses["data"] = self.data_loss(pred, batch["prices"])
 
-        losses["physics"] = self.physics_loss(model, params, coords)
+        if self.cfg.lambda_physics > 0:
+            losses["physics"] = self.physics_loss(model, params, coords)
+        else:
+            losses["physics"] = torch.tensor(0.0, device=device)
+
         losses["operator"] = self.operator_loss(out)
-        losses["boundary"] = self.boundary_loss(model, params, device)
+
+        if self.cfg.lambda_boundary > 0:
+            losses["boundary"] = self.boundary_loss(model, params, device)
+        else:
+            losses["boundary"] = torch.tensor(0.0, device=device)
 
         if model.cfg.option_style.value == "american":
             losses["american"] = self.american_penalty(pred, coords, params)

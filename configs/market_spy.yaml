@@ -19,10 +19,10 @@ loss:
   pde_type: black_scholes
   adaptive: true
   lambda_data: 0.4
-  lambda_physics: 0.04
+  lambda_physics: 0.02
   lambda_boundary: 0.3
-  lambda_market: 4.0
-  relative_data_weight: 0.6
+  lambda_market: 6.0
+  relative_data_weight: 0.7
   use_log_spatial: true
 
 train:

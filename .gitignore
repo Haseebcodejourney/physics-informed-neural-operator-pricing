@@ -27,6 +27,9 @@ Thumbs.db
 # Logs
 *.log
 
-# Raw market downloads (fetch locally)
+# Raw market downloads (ignore ad-hoc fetches; versioned datasets below)
 data/raw/*.csv
 !data/raw/.gitkeep
+!data/raw/spy_options.csv
+!data/raw/spy_options_full.csv
+!data/raw/multi_options.csv

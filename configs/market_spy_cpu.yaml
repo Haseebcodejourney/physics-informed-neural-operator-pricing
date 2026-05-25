@@ -1,0 +1,43 @@
+# CPU-friendly real-market training (no heavy physics autograd)
+
+model:
+  backbone: fno
+  hidden_dim: 96
+  fno_depth: 3
+  fno_modes: 12
+  n_spatial: 32
+  n_temporal: 16
+  n_fourier_freq: 4
+
+data:
+  model: black_scholes
+  n_spatial: 32
+  n_temporal: 16
+  log_spatial_grid: true
+
+loss:
+  pde_type: black_scholes
+  adaptive: true
+  lambda_data: 0.5
+  lambda_physics: 0.0
+  lambda_boundary: 0.15
+  lambda_market: 8.0
+  relative_data_weight: 0.75
+  use_log_spatial: true
+
+train:
+  experiment_name: cf_hpino_market_spy_cpu
+  device: cpu
+  checkpoint_dir: checkpoints/market_spy
+  curriculum: [black_scholes]
+  epochs_per_stage: 40
+  min_epochs: 10
+  patience: 12
+  batch_size: 4
+  lr: 0.001
+  use_ema: true
+  ema_decay: 0.999
+  warmup_epochs: 4
+  use_amp: false
+  run_test_after_train: false
+  seed: 42

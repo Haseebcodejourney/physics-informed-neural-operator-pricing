@@ -6,8 +6,14 @@
 cd cf_hpino
 pip install yfinance pandas
 
-# 1) Download live option chain
-python scripts/fetch_market_data.py --ticker SPY --out data/raw/spy_options.csv
+# 1) Download live option chain (all expiries = more training surfaces)
+python scripts/fetch_market_data.py --ticker SPY --max-expiries 0 --out data/raw/spy_options_full.csv
+
+# Multi-asset (SPY + QQQ + IWM), calls only
+python scripts/fetch_market_data.py --tickers SPY,QQQ,IWM --max-expiries 0 --out data/raw/multi_options.csv
+
+# Even more rows: include puts (loader keeps calls only for BS training)
+python scripts/fetch_market_data.py --ticker SPY --max-expiries 0 --include-puts --out data/raw/spy_all_types.csv
 
 # 2) Train on real quotes (split by expiry)
 python scripts/train_market.py --csv data/raw/spy_options.csv --device cuda --fetch
@@ -53,5 +59,5 @@ Place files under `data/raw/` and pass `--csv` to `train_market.py`.
 ## Notes
 
 - **SPY vs SPX**: Yahoo provides SPY chains reliably; SPX index options may need a paid feed or manual CSV.
-- Fetch **more expiries** if training fails (`--max-expiries 20` in fetch script).
+- Fetch **more expiries** if training fails: use `--max-expiries 0` (all listed dates) or add tickers with `--tickers SPY,QQQ,IWM`.
 - For publication, report **test_quote_rmse** (dollars on mids) and **test_surface_rel_l2** from `checkpoints/market/logs/market_test.json`.
