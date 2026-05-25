@@ -1,0 +1,71 @@
+% ICSCCW 2026 — CF-HPINO (references [1]-[15] per user list + Raissi + repo)
+
+\documentclass[10pt,a4paper]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{mathptmx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{enumitem}
+\setlist{nosep,leftmargin=*}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\title{\textbf{Cloud-Enabled Fractional Hybrid Physics-Informed Neural Operator for Financial Derivative Pricing}}
+\author{[Author One]$^{1,*}$ \and [Author Two]$^{1}$ \and [Author Three]$^{2}$\\[0.4em]
+\small $^{1}$[University], [City], [Country] \quad $^{2}$[Institution], [City], [Country]\\
+\small $^{*}$[email@university.edu]}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We propose \textbf{CF-HPINO}, a cloud-enabled hybrid of Fourier neural operators and physics-informed learning for parametric option surfaces under Black--Scholes, fractional, and Merton models, with real SPY market supervision \cite{cfhpino2026repo}. The design extends recent PINN and hybrid operator literature \cite{ref01_dhiman2023,ref04_elbayed2025,ref07_feng2025,ref08_hainaut2024} and PIDE finance applications \cite{ref02_bansal2025,ref09_illiquid2025}. On synthetic held-out parameters, CF-HPINO achieves rel-$L_2 \approx 0.68$ vs.\ PINN/FNO $\approx 0.99$ (short budgets). Preliminary SPY training (5,283 quotes) yields val rel-$L_2$ 4.29 and quote RMSE \$379.
+\end{abstract}
+
+\noindent\textbf{Keywords:} PINN; neural operator; option pricing; hybrid FNO; ScienceDirect.
+
+\section{Introduction}
+
+Physics-informed neural networks (PINNs) \cite{raissi2019physics} are widely applied to option pricing: Dhiman and Hu \cite{ref01_dhiman2023} price European and American options via Black--Scholes PINNs; Gatta \emph{et al.} \cite{ref03_gatta2023} (\textbf{ScienceDirect}) treat American options meshlessly; Hainaut and Casas \cite{ref08_hainaut2024} address Heston models; Pande \emph{et al.} \cite{ref11_pande2025} (\textbf{ScienceDirect}) use physics-informed residual learning for regime switching; Sun \emph{et al.} \cite{ref12_sun2025} study American options under jump diffusion with scarce data; illiquid jump markets are treated in \cite{ref09_illiquid2025}. Fractional and barrier extensions appear in \cite{ref10_nuugulu2025,ref14_sharma2026,ref05_chen2025barrier}. Bansal \emph{et al.} \cite{ref02_bansal2025} target PIDEs in financial modeling (\emph{Applied Soft Computing}).
+
+\textbf{Hybrid PINN--operator} methods are emerging: Elbayed and Qadi el Idrissi \cite{ref04_elbayed2025} combine PINNs and FNOs for advanced pricing (up to $\sim$50\% MSE reduction in preprints); Feng \emph{et al.} \cite{ref07_feng2025} propose a hybrid neural-operator framework for SPDE-based pricing; Lee \emph{et al.} \cite{ref06_lee2026} use DeepONet surrogates for bond options; Wiedemann \emph{et al.} \cite{ref13_wiedemann2024} smooth implied volatility with operators; Liu \emph{et al.} \cite{ref15_liu2024kan} introduce Kolmogorov--Arnold finance-informed networks.
+
+\textbf{Contribution.} CF-HPINO unifies (i) FNO/DeepONet amortization, (ii) fractional/Merton physics losses, (iii) attention fusion, and (iv) cloud-ready real-data pipelines \cite{cfhpino2026repo}, positioned against \cite{ref04_elbayed2025,ref01_dhiman2023,ref03_gatta2023}.
+
+\section{Methodology}
+
+We learn $\hat{V}(S,t;\boldsymbol{\theta})$ with hybrid loss $\mathcal{L}=\lambda_d\mathcal{L}_{\mathrm{data}}+\lambda_p\mathcal{L}_{\mathrm{physics}}+\lambda_b\mathcal{L}_{\mathrm{boundary}}+\lambda_m\mathcal{L}_{\mathrm{market}}$, following PINN practice \cite{raissi2019physics,ref01_dhiman2023} and PIDE settings \cite{ref02_bansal2025,ref09_illiquid2025}. Architecture: FNO backbone \cite{ref04_elbayed2025,ref07_feng2025}, physics branch, attention fusion (cf.\ \cite{ref14_sharma2026}). Training uses synthetic surfaces and Yahoo SPY chains; splits by $\boldsymbol{\theta}$ or expiry \cite{ref11_pande2025}.
+
+\section{Results}
+
+\begin{table}[h]
+\centering
+\caption{Synthetic test rel-$L_2$ vs.\ literature-style baselines.}
+\label{tab:r}
+\begin{tabular}{lcc}
+\toprule
+Method & Config & rel-$L_2$ \\
+\midrule
+CF-HPINO & smoke, 3 ep. & 0.68 \\
+PINN \cite{ref01_dhiman2023} & smoke & 0.99 \\
+Pure FNO \cite{ref04_elbayed2025} & smoke & 0.99 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent\textbf{Real SPY:} 5,283 quotes; val rel-$L_2$ \textbf{4.29}; quote RMSE \textbf{\$379}. Improves over untrained runs but remains above desk targets in \cite{ref08_hainaut2024,ref11_pande2025}.
+
+\section{Discussion}
+
+CF-HPINO is closest to the hybrid PINN--FNO line \cite{ref04_elbayed2025} but adds fractional/Merton physics, market-quote loss, and open cloud tooling \cite{cfhpino2026repo}. Compared to \cite{ref03_gatta2023,ref12_sun2025}, American treatment remains penalty-based. Compared to \cite{ref15_liu2024kan,ref13_wiedemann2024}, we emphasize full surface PDE consistency. Future work: Heston benchmarks \cite{ref08_hainaut2024}, regime switching \cite{ref11_pande2025}, and GPU convergence.
+
+\section{Conclusion}
+
+CF-HPINO contributes a documented hybrid physics-informed neural operator for option pricing, with reproducible synthetic and SPY experiments, aligned with the 2023--2026 PINN/operator finance literature \cite{ref01_dhiman2023,ref04_elbayed2025,ref08_hainaut2024,ref11_pande2025}.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}

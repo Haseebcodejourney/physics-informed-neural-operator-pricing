@@ -128,6 +128,14 @@ Details: [data/README.md](data/README.md)
 
 ---
 
+## Research paper (ICSCCW 2026)
+
+Draft manuscript for [ICSCCW 2026](https://icsccw2026.az/submission.html) (max 8 pages, Times New Roman, PDF + Word):
+
+- [docs/paper/ICSCCW2026_CF_HPINO.tex](docs/paper/ICSCCW2026_CF_HPINO.tex) — LaTeX source  
+- [docs/paper/ICSCCW2026_CF_HPINO.md](docs/paper/ICSCCW2026_CF_HPINO.md) — Word-friendly draft  
+- [docs/paper/SUBMISSION_GUIDE.md](docs/paper/SUBMISSION_GUIDE.md) — formatting checklist  
+
 ## Limitations
 
 See **[LIMITATIONS.md](LIMITATIONS.md)** for known scope limits, safe paper claims, and the mitigation roadmap.
